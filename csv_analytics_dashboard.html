@@ -1,0 +1,1470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DataLens — CSV Analytics Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #07090f;
+    --bg2: #0d1017;
+    --surface: #111520;
+    --card: #151a27;
+    --border: rgba(99,179,237,0.1);
+    --border2: rgba(99,179,237,0.22);
+    --accent: #4ea8f5;
+    --accent2: #43e97b;
+    --accent3: #f5a623;
+    --accent4: #f06595;
+    --purple: #a78bfa;
+    --text: #e8eef8;
+    --muted: #6b7a99;
+    --muted2: #4a5568;
+    --font-display: 'Bebas Neue', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    font-family: var(--font-body);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── GRID BG ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(78,168,245,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(78,168,245,0.03) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body > * { position: relative; z-index: 1; }
+
+  /* ── TOPBAR ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 2rem;
+    border-bottom: 1px solid var(--border);
+    background: rgba(7,9,15,0.8);
+    backdrop-filter: blur(12px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: var(--font-display);
+    font-size: 26px;
+    letter-spacing: 3px;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%,100% { opacity:1; transform:scale(1); }
+    50% { opacity:0.5; transform:scale(0.7); }
+  }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    font-size: 12px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+  }
+
+  .status-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: var(--font-mono);
+    transition: all .3s;
+  }
+  .status-badge.ready { border-color: rgba(67,233,123,.3); color: var(--accent2); background: rgba(67,233,123,.07); }
+  .status-badge.loading { border-color: rgba(78,168,245,.3); color: var(--accent); background: rgba(78,168,245,.07); }
+
+  /* ── HERO ── */
+  .hero {
+    padding: 5rem 2rem 3rem;
+    text-align: center;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .hero-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .hero-eyebrow::before,
+  .hero-eyebrow::after {
+    content: '';
+    height: 1px;
+    width: 40px;
+    background: linear-gradient(90deg, transparent, var(--accent));
+  }
+  .hero-eyebrow::after { background: linear-gradient(90deg, var(--accent), transparent); }
+
+  .hero-title {
+    font-family: var(--font-display);
+    font-size: clamp(48px, 8vw, 90px);
+    letter-spacing: 4px;
+    line-height: 0.95;
+    margin-bottom: 1.25rem;
+    background: linear-gradient(135deg, var(--text) 40%, var(--muted));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero-sub {
+    font-size: 16px;
+    color: var(--muted);
+    line-height: 1.7;
+    max-width: 520px;
+    margin: 0 auto 2.5rem;
+    font-weight: 300;
+  }
+
+  /* ── DROP ZONE ── */
+  .drop-zone {
+    margin: 0 auto 2rem;
+    max-width: 680px;
+    border: 2px dashed var(--border2);
+    border-radius: 20px;
+    padding: 3.5rem 2rem;
+    cursor: pointer;
+    transition: all .25s;
+    background: rgba(78,168,245,0.02);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .drop-zone::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, var(--accent), var(--purple), var(--accent2));
+    opacity: 0;
+    transition: opacity .3s;
+    z-index: -1;
+  }
+
+  .drop-zone.drag-over {
+    border-color: transparent;
+    background: rgba(78,168,245,0.06);
+    transform: scale(1.01);
+  }
+  .drop-zone.drag-over::before { opacity: 0.4; }
+
+  .drop-icon {
+    font-size: 48px;
+    margin-bottom: 1rem;
+    display: block;
+    filter: grayscale(0.3);
+  }
+
+  .drop-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: .5rem;
+    color: var(--text);
+  }
+
+  .drop-sub {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 1.5rem;
+  }
+
+  .drop-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 24px;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: var(--font-body);
+    transition: all .2s;
+  }
+  .drop-btn:hover { background: rgba(78,168,245,.1); }
+
+  #fileInput { display: none; }
+
+  /* ── SAMPLE BUTTON ── */
+  .sample-hint {
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    margin-bottom: 3rem;
+  }
+  .sample-hint a {
+    color: var(--accent3);
+    cursor: pointer;
+    text-decoration: none;
+    border-bottom: 1px dashed var(--accent3);
+  }
+
+  /* ── DASHBOARD ── */
+  #dashboard {
+    display: none;
+    padding: 0 1.5rem 3rem;
+    max-width: 1400px;
+    margin: 0 auto;
+    animation: fadeUp .5s ease forwards;
+  }
+
+  @keyframes fadeUp {
+    from { opacity:0; transform:translateY(20px); }
+    to { opacity:1; transform:translateY(0); }
+  }
+
+  /* ── FILE INFO BAR ── */
+  .file-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .75rem 1.25rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+
+  .file-info { display: flex; align-items: center; gap: .75rem; }
+  .file-name { font-family: var(--font-mono); font-size: 13px; color: var(--accent); }
+  .file-meta { font-size: 11px; color: var(--muted); }
+
+  .btn-upload-new {
+    padding: 6px 16px;
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--muted);
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: var(--font-body);
+    transition: all .2s;
+  }
+  .btn-upload-new:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── TABS ── */
+  .tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 1.5rem;
+    overflow-x: auto;
+  }
+
+  .tab {
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    transition: all .2s;
+    white-space: nowrap;
+    font-family: var(--font-body);
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab:hover { color: var(--text); }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── METRIC CARDS ── */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: .75rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .metric-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1rem 1.25rem;
+    transition: border-color .2s;
+  }
+  .metric-card:hover { border-color: var(--border2); }
+
+  .mc-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    margin-bottom: .4rem;
+  }
+
+  .mc-value {
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .mc-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* ── CHARTS GRID ── */
+  .charts-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .charts-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .chart-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.25rem;
+  }
+
+  .chart-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    margin-bottom: .9rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .chart-title-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  canvas { display: block; width: 100% !important; }
+
+  /* ── DATA TABLE ── */
+  .table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  thead { background: var(--surface); }
+
+  th {
+    padding: 10px 14px;
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition: color .15s;
+  }
+  th:hover { color: var(--accent); }
+  th.sort-asc::after { content: ' ↑'; color: var(--accent); }
+  th.sort-desc::after { content: ' ↓'; color: var(--accent); }
+
+  td {
+    padding: 9px 14px;
+    border-bottom: 1px solid rgba(255,255,255,.03);
+    white-space: nowrap;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  tr:hover td { background: rgba(78,168,245,.04); }
+  tr:last-child td { border-bottom: none; }
+
+  /* ── STATS TABLE ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .stat-col-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.1rem;
+  }
+
+  .stat-col-name {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+    margin-bottom: .6rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .stat-type-badge {
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+  }
+  .stat-type-badge.num { background: rgba(78,168,245,.15); color: var(--accent); }
+  .stat-type-badge.cat { background: rgba(167,139,250,.15); color: var(--purple); }
+
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 12px;
+    border-bottom: 1px solid rgba(255,255,255,.04);
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-key { color: var(--muted); }
+  .stat-val { font-weight: 500; font-family: var(--font-mono); font-size: 11px; }
+
+  /* ── CORRELATION ── */
+  .heatmap-wrap { overflow-x: auto; }
+  .heatmap {
+    display: inline-grid;
+    gap: 2px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+  }
+
+  .hm-cell {
+    width: 54px; height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 500;
+    transition: transform .15s;
+    cursor: default;
+  }
+  .hm-cell:hover { transform: scale(1.1); z-index: 10; }
+  .hm-label {
+    width: 54px; height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: var(--muted);
+    text-align: center;
+    word-break: break-all;
+    line-height: 1.2;
+  }
+
+  /* ── CONTROLS ── */
+  .ctrl-row {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .ctrl-label {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+  }
+
+  select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: var(--font-body);
+    transition: border-color .2s;
+  }
+  select:hover { border-color: var(--border2); }
+
+  input[type="text"], input[type="search"] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-family: var(--font-body);
+    outline: none;
+    transition: border-color .2s;
+  }
+  input[type="text"]:focus, input[type="search"]:focus { border-color: var(--accent); }
+
+  /* ── PAGINATION ── */
+  .pagination {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin-top: .75rem;
+    flex-wrap: wrap;
+  }
+
+  .page-btn {
+    padding: 5px 12px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    transition: all .15s;
+  }
+  .page-btn:hover, .page-btn.active { border-color: var(--accent); color: var(--accent); }
+  .page-btn:disabled { opacity: .3; cursor: default; }
+  .page-info { font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
+
+  /* ── EMPTY / ERROR ── */
+  .empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  /* ── PROGRESS BAR ── */
+  .bar-mini { height: 4px; background: rgba(255,255,255,.06); border-radius: 2px; margin-top: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 2px; transition: width .6s ease; }
+
+  /* ── SECTION DIVIDER ── */
+  .section-divider {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin: 1.5rem 0 1rem;
+  }
+  .section-divider span { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); white-space: nowrap; }
+  .section-divider::before, .section-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* ── SCATTER CTRL ── */
+  .pill-row { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .75rem; }
+  .pill {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .pill.active { border-color: var(--accent); color: var(--accent); background: rgba(78,168,245,.1); }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    .charts-grid-2, .charts-grid-3 { grid-template-columns: 1fr; }
+    .hero-title { font-size: 48px; }
+    .topbar { padding: 1rem; }
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--muted2); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<nav class="topbar">
+  <div class="logo">
+    <div class="logo-dot"></div>
+    DataLens
+  </div>
+  <div class="topbar-right">
+    <span id="statusBadge" class="status-badge">awaiting data</span>
+  </div>
+</nav>
+
+<!-- UPLOAD HERO -->
+<div id="uploadSection">
+  <div class="hero">
+    <div class="hero-eyebrow">Universal CSV Analytics</div>
+    <div class="hero-title">Drop Your Data,<br>See Everything</div>
+    <div class="hero-sub">Upload any CSV file and instantly get charts, statistics, correlations, distributions, and a full interactive data table — zero configuration required.</div>
+  </div>
+
+  <div class="drop-zone" id="dropZone">
+    <span class="drop-icon">📊</span>
+    <div class="drop-title">Drop your CSV file here</div>
+    <div class="drop-sub">Supports any CSV format — headers auto-detected</div>
+    <button class="drop-btn" onclick="document.getElementById('fileInput').click()">
+      📁 Browse Files
+    </button>
+    <input type="file" id="fileInput" accept=".csv,.tsv,.txt">
+  </div>
+
+  <div class="sample-hint">
+    Don't have a file?
+    <a onclick="loadSampleData()">Load football players sample dataset</a>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+  <div class="file-bar">
+    <div class="file-info">
+      <span>📄</span>
+      <span class="file-name" id="fileName">—</span>
+      <span class="file-meta" id="fileMeta">—</span>
+    </div>
+    <button class="btn-upload-new" onclick="resetApp()">↑ Upload New File</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('overview', this)">Overview</button>
+    <button class="tab" onclick="switchTab('charts', this)">Charts</button>
+    <button class="tab" onclick="switchTab('stats', this)">Statistics</button>
+    <button class="tab" onclick="switchTab('correlation', this)">Correlation</button>
+    <button class="tab" onclick="switchTab('explore', this)">Scatter</button>
+    <button class="tab" onclick="switchTab('table', this)">Data Table</button>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div id="tab-overview" class="tab-panel active">
+    <div class="metrics-grid" id="metricsGrid"></div>
+    <div class="charts-grid-2">
+      <div class="chart-card">
+        <div class="chart-title"><div class="chart-title-dot"></div> First Numeric Column Distribution</div>
+        <div style="position:relative;height:250px"><canvas id="c-dist" role="img" aria-label="Distribution chart">Distribution histogram.</canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title"><div class="chart-title-dot" style="background:var(--accent2)"></div> Top Category Column</div>
+        <div style="position:relative;height:250px"><canvas id="c-cat" role="img" aria-label="Category breakdown chart">Category breakdown.</canvas></div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title"><div class="chart-title-dot" style="background:var(--accent3)"></div> Numeric Columns — Value Range Overview</div>
+      <div style="position:relative;height:220px"><canvas id="c-range" role="img" aria-label="Column ranges chart">Column ranges.</canvas></div>
+    </div>
+  </div>
+
+  <!-- CHARTS -->
+  <div id="tab-charts" class="tab-panel">
+    <div class="ctrl-row">
+      <span class="ctrl-label">Column</span>
+      <select id="chartCol"></select>
+      <span class="ctrl-label">Chart type</span>
+      <select id="chartType" onchange="buildCustomChart()">
+        <option value="bar">Bar</option>
+        <option value="line">Line</option>
+        <option value="pie">Pie</option>
+        <option value="doughnut">Doughnut</option>
+        <option value="radar">Radar</option>
+      </select>
+      <span class="ctrl-label">Aggregate by</span>
+      <select id="aggCol"></select>
+      <button class="drop-btn" style="padding:7px 16px;font-size:12px" onclick="buildCustomChart()">Generate Chart</button>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title" id="customChartTitle"><div class="chart-title-dot"></div> Chart</div>
+      <div style="position:relative;height:380px"><canvas id="c-custom" role="img" aria-label="Custom chart">Custom chart.</canvas></div>
+    </div>
+    <div class="section-divider"><span>Column Distribution Gallery</span></div>
+    <div class="charts-grid-3" id="galleryGrid"></div>
+  </div>
+
+  <!-- STATISTICS -->
+  <div id="tab-stats" class="tab-panel">
+    <div class="section-divider"><span>Numeric Columns</span></div>
+    <div class="stats-grid" id="numericStats"></div>
+    <div class="section-divider"><span>Categorical Columns</span></div>
+    <div class="stats-grid" id="catStats"></div>
+  </div>
+
+  <!-- CORRELATION -->
+  <div id="tab-correlation" class="tab-panel">
+    <div class="chart-card" style="margin-bottom:1rem">
+      <div class="chart-title"><div class="chart-title-dot" style="background:var(--purple)"></div> Pearson Correlation Matrix</div>
+      <div class="heatmap-wrap" id="correlationHeatmap"></div>
+    </div>
+    <div class="charts-grid-2">
+      <div class="chart-card">
+        <div class="chart-title"><div class="chart-title-dot"></div> Correlation with First Numeric Column</div>
+        <div style="position:relative;height:280px"><canvas id="c-corrbar" role="img" aria-label="Correlation bar chart">Correlation chart.</canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title"><div class="chart-title-dot" style="background:var(--accent3)"></div> Top Correlated Pairs</div>
+        <div id="corrPairs"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCATTER -->
+  <div id="tab-explore" class="tab-panel">
+    <div class="ctrl-row">
+      <span class="ctrl-label">X</span>
+      <select id="scatterX" onchange="buildScatter()"></select>
+      <span class="ctrl-label">Y</span>
+      <select id="scatterY" onchange="buildScatter()"></select>
+      <span class="ctrl-label">Color by</span>
+      <select id="scatterColor" onchange="buildScatter()"></select>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title"><div class="chart-title-dot"></div> Scatter Plot</div>
+      <div style="position:relative;height:420px"><canvas id="c-scatter" role="img" aria-label="Scatter plot">Scatter chart.</canvas></div>
+    </div>
+  </div>
+
+  <!-- TABLE -->
+  <div id="tab-table" class="tab-panel">
+    <div class="ctrl-row">
+      <input type="search" id="tableSearch" placeholder="Search rows…" oninput="filterTable()" style="width:220px">
+      <span class="ctrl-label">Rows per page</span>
+      <select id="rowsPerPage" onchange="renderTable()">
+        <option value="20">20</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+      <span class="page-info" id="tableInfo"></span>
+    </div>
+    <div class="table-wrap">
+      <table id="dataTable">
+        <thead id="tableHead"></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="pagination"></div>
+  </div>
+</div>
+
+<script>
+// ──────────────────────────────────────────────
+// STATE
+// ──────────────────────────────────────────────
+let G = {
+  data: [],        // parsed rows as objects
+  cols: [],        // all column names
+  numCols: [],     // numeric column names
+  catCols: [],     // categorical column names
+  fileName: '',
+  currentPage: 1,
+  sortCol: null,
+  sortDir: 1,
+  filteredData: [],
+  charts: {}
+};
+
+const PALETTE = ['#4ea8f5','#43e97b','#f5a623','#f06595','#a78bfa','#67e8f9','#fbbf24','#34d399','#fb923c','#e879f9','#60a5fa','#a3e635'];
+const dkGrid = { color: 'rgba(255,255,255,0.05)' };
+const dkTick = { color: '#6b7a99', font: { size: 11 } };
+
+// ──────────────────────────────────────────────
+// DROP ZONE
+// ──────────────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) parseFile(file);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) parseFile(fileInput.files[0]);
+});
+
+// ──────────────────────────────────────────────
+// PARSE
+// ──────────────────────────────────────────────
+function parseFile(file) {
+  setStatus('loading', 'parsing…');
+  G.fileName = file.name;
+  const isTSV = file.name.endsWith('.tsv');
+
+  Papa.parse(file, {
+    header: true,
+    dynamicTyping: true,
+    skipEmptyLines: true,
+    delimiter: isTSV ? '\t' : '',
+    complete: result => {
+      initData(result.data, result.meta.fields, file.name, (file.size / 1024).toFixed(1) + ' KB');
+    },
+    error: err => { alert('Parse error: ' + err.message); setStatus('await', 'awaiting data'); }
+  });
+}
+
+function loadSampleData() {
+  setStatus('loading', 'loading sample…');
+  // Inline football sample
+  const csv = `Teams,Seasons,Players,Matches,Goals,Assists,Seasons Ratings
+InterMiami,2024,Lionel Messi,15,14,11,8.5
+InterMiami,2023,Lionel Messi,14,11,5,8.0
+PSG,2022/2023,Lionel Messi,41,21,20,8.1
+Barcelona,2020/2021,Lionel Messi,47,38,12,8.4
+Barcelona,2018/2019,Lionel Messi,50,51,19,8.5
+AL Nassr,2023/2024,Cristiano Ronaldo,51,50,13,8.1
+AL Nassr,2022/2023,Cristiano Ronaldo,19,14,2,7.7
+Man United,2021/2022,Cristiano Ronaldo,16,3,2,7.0
+Juventus,2018/2019,Cristiano Ronaldo,44,36,5,7.9
+Real Madrid,2016/2017,Cristiano Ronaldo,46,42,11,7.9
+PSG,2023/2024,Kylian Mbappe,48,44,10,8.0
+PSG,2022/2023,Kylian Mbappe,43,41,9,7.9
+PSG,2021/2022,Kylian Mbappe,46,39,21,8.2
+Man City,2023/2024,Erling Haaland,45,38,6,7.7
+Man City,2022/2023,Erling Haaland,53,52,9,7.6
+Dortmund,2021/2022,Erling Haaland,30,29,7,7.8
+Dortmund,2020/2021,Erling Haaland,41,41,10,7.9
+Liverpool,2023/2024,Mohamed Salah,44,25,13,7.5
+Liverpool,2022/2023,Mohamed Salah,51,30,16,7.5
+Liverpool,2017/2018,Mohamed Salah,52,44,14,7.8
+Real Madrid,2021/2022,Kamir Benzema,46,44,15,8.1
+Real Madrid,2022/2023,Kamir Benzema,43,31,6,7.8
+Real Madrid,2023/2024,Vinicius Junior,39,24,9,7.6
+Real Madrid,2022/2023,Vinicius Junior,55,23,19,7.8
+Bayern Munchen,2019/2020,Robert Lewandowski,47,55,9,8.2
+Bayern Munchen,2020/2021,Robert Lewandowski,40,48,9,8.1
+Bayern Munchen,2021/2022,Robert Lewandowski,46,50,6,8.0
+Bayern Munchen,2023/2024,Harry Kane,45,44,12,7.9
+Tottenham,2017/2018,Harry Kane,48,41,4,7.6
+Arsenal,2023/2024,Bukayo Saka,47,20,14,7.9
+Arsenal,2022/2023,Bukayo Saka,48,15,11,7.5
+Man City,2023/2024,Rodri,50,9,13,8.1
+Man City,2022/2023,Rodri,56,4,7,7.7
+Man City,2023/2024,Phil Foden,53,27,12,7.8
+Real Madrid,2023/2024,Jude Bellingham,42,23,13,8.0
+Dortmund,2022/2023,Jude Bellingham,42,14,6,7.7
+Man United,2023/2024,Bruno Fernandes,48,15,13,7.9
+Man United,2022/2023,Bruno Fernandes,59,14,13,7.8
+SSC Napoli,2022/2023,Victor Osimhen,39,31,4,7.6
+Inter,2023/2024,Lautaro Martinez,44,27,3,7.5
+Inter,2022/2023,Lautaro Martinez,57,28,10,7.4
+Atletico Madrid,2023/2024,Antoine Griezmann,48,24,8,7.6
+PSG,2017/2018,Neymar,30,28,16,8.9
+Barcelona,2016/2017,Neymar,45,20,21,8.4
+AC Milan,2023/2024,Rafael Leao,48,15,12,7.5
+AC Milan,2022/2023,Rafael Leao,48,16,11,7.4
+Roma,2023/2024,Paulo Dybala,39,16,10,7.4
+Man City,2023/2024,Julian Alvarez,54,19,13,7.4
+Barcelona,2022/2023,Robert Lewandowski,46,33,8,7.6
+Arsenal,2023/2024,Declan Rice,51,7,9,7.6`;
+
+  const result = Papa.parse(csv, { header: true, dynamicTyping: true, skipEmptyLines: true });
+  initData(result.data, result.meta.fields, 'football_players_sample.csv', '~6 KB');
+}
+
+function initData(data, fields, name, sizeStr) {
+  G.data = data;
+  G.cols = fields || Object.keys(data[0] || {});
+  G.numCols = G.cols.filter(c => data.slice(0,50).some(r => typeof r[c] === 'number'));
+  G.catCols = G.cols.filter(c => !G.numCols.includes(c));
+  G.filteredData = [...G.data];
+  G.currentPage = 1;
+  G.sortCol = null;
+
+  document.getElementById('fileName').textContent = name;
+  document.getElementById('fileMeta').textContent = `${data.length.toLocaleString()} rows · ${G.cols.length} columns · ${sizeStr}`;
+  setStatus('ready', 'ready');
+
+  document.getElementById('uploadSection').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+
+  populateSelects();
+  buildOverview();
+  buildStats();
+  buildCorrelation();
+  buildScatter();
+  buildGallery();
+  buildCustomChart();
+  renderTable();
+}
+
+function setStatus(state, text) {
+  const el = document.getElementById('statusBadge');
+  el.className = 'status-badge ' + (state === 'ready' ? 'ready' : state === 'loading' ? 'loading' : '');
+  el.textContent = text;
+}
+
+function resetApp() {
+  destroyAllCharts();
+  G = { data:[], cols:[], numCols:[], catCols:[], fileName:'', currentPage:1, sortCol:null, sortDir:1, filteredData:[], charts:{} };
+  document.getElementById('uploadSection').style.display = 'block';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('fileInput').value = '';
+  setStatus('', 'awaiting data');
+  switchTab('overview', document.querySelector('.tab'));
+}
+
+// ──────────────────────────────────────────────
+// SELECTS
+// ──────────────────────────────────────────────
+function populateSelects() {
+  const numOpts = G.numCols.map(c => `<option value="${c}">${c}</option>`).join('');
+  const catOpts = G.catCols.map(c => `<option value="${c}">${c}</option>`).join('');
+  const allOpts = G.cols.map(c => `<option value="${c}">${c}</option>`).join('');
+
+  ['scatterX','scatterY','chartCol'].forEach(id => {
+    document.getElementById(id).innerHTML = numOpts || allOpts;
+  });
+  document.getElementById('scatterColor').innerHTML = `<option value="_none">None</option>` + catOpts;
+  document.getElementById('aggCol').innerHTML = `<option value="_none">None (count)</option>` + catOpts;
+
+  if (G.numCols.length >= 2) {
+    document.getElementById('scatterY').value = G.numCols[1];
+  }
+}
+
+// ──────────────────────────────────────────────
+// CHARTS UTILS
+// ──────────────────────────────────────────────
+function dc(id) { if (G.charts[id]) { G.charts[id].destroy(); delete G.charts[id]; } }
+function mk(id, cfg) {
+  dc(id);
+  const el = document.getElementById(id);
+  if (!el) return;
+  G.charts[id] = new Chart(el, cfg);
+  return G.charts[id];
+}
+function destroyAllCharts() { Object.keys(G.charts).forEach(dc); }
+
+// ──────────────────────────────────────────────
+// OVERVIEW
+// ──────────────────────────────────────────────
+function buildOverview() {
+  // Metric cards
+  const cards = [
+    { label: 'Total Rows', value: G.data.length.toLocaleString(), sub: 'records', color: '#4ea8f5' },
+    { label: 'Columns', value: G.cols.length, sub: `${G.numCols.length} numeric, ${G.catCols.length} categorical`, color: '#43e97b' },
+    { label: 'Numeric Cols', value: G.numCols.length, sub: G.numCols.slice(0,3).join(', '), color: '#f5a623' },
+    { label: 'Categorical', value: G.catCols.length, sub: G.catCols.slice(0,3).join(', '), color: '#a78bfa' },
+  ];
+
+  // Add numeric stats for first numeric col
+  if (G.numCols.length > 0) {
+    const vals = G.data.map(r => r[G.numCols[0]]).filter(v => v != null && !isNaN(v));
+    const avg = vals.reduce((a,b)=>a+b,0) / vals.length;
+    const max = Math.max(...vals);
+    cards.push({ label: `Max ${G.numCols[0]}`, value: max.toLocaleString(undefined,{maximumFractionDigits:2}), sub: `avg ${avg.toFixed(2)}`, color: '#f06595' });
+  }
+
+  document.getElementById('metricsGrid').innerHTML = cards.map(c => `
+    <div class="metric-card">
+      <div class="mc-label">${c.label}</div>
+      <div class="mc-value" style="color:${c.color}">${c.value}</div>
+      <div class="mc-sub">${c.sub}</div>
+    </div>`).join('');
+
+  // Distribution of first numeric col
+  if (G.numCols.length > 0) {
+    const col = G.numCols[0];
+    const vals = G.data.map(r => r[col]).filter(v => v!=null && !isNaN(v)).sort((a,b)=>a-b);
+    const min = vals[0], max = vals[vals.length-1];
+    const bins = 10;
+    const step = (max - min) / bins || 1;
+    const hist = Array(bins).fill(0);
+    vals.forEach(v => { const i = Math.min(bins-1, Math.floor((v-min)/step)); hist[i]++; });
+    const labels = Array.from({length:bins}, (_,i) => (min + i*step).toFixed(1));
+
+    mk('c-dist', {
+      type: 'bar',
+      data: { labels, datasets: [{ data: hist, backgroundColor: PALETTE[0]+'55', borderColor: PALETTE[0], borderWidth: 1, borderRadius: 4 }] },
+      options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, title:{display:true,text:col,color:'#6b7a99',font:{size:11}} }, scales:{ x:{grid:dkGrid,ticks:dkTick}, y:{grid:dkGrid,ticks:dkTick} } }
+    });
+  } else { document.getElementById('c-dist').closest('.chart-card').innerHTML = '<div class="empty-state">No numeric columns found</div>'; }
+
+  // Top category column
+  if (G.catCols.length > 0) {
+    const col = G.catCols[0];
+    const counts = {};
+    G.data.forEach(r => { const v = String(r[col]??''); counts[v] = (counts[v]||0)+1; });
+    const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,12);
+
+    mk('c-cat', {
+      type: 'bar',
+      data: { labels: sorted.map(([k])=>k), datasets: [{ data: sorted.map(([,v])=>v), backgroundColor: PALETTE.map(c=>c+'66'), borderColor: PALETTE, borderWidth: 1, borderRadius: 4 }] },
+      options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, title:{display:true,text:`${col} (count)`,color:'#6b7a99',font:{size:11}} }, scales:{ x:{grid:dkGrid,ticks:{...dkTick,maxRotation:35,font:{size:10}}}, y:{grid:dkGrid,ticks:dkTick} } }
+    });
+  } else { document.getElementById('c-cat').closest('.chart-card').innerHTML = '<div class="empty-state">No categorical columns found</div>'; }
+
+  // Range chart
+  if (G.numCols.length > 0) {
+    const cols = G.numCols.slice(0,8);
+    const means = cols.map(c => { const v = G.data.map(r=>r[c]).filter(x=>x!=null&&!isNaN(x)); return v.reduce((a,b)=>a+b,0)/v.length; });
+    const maxes = cols.map(c => Math.max(...G.data.map(r=>r[c]).filter(x=>x!=null&&!isNaN(x))));
+
+    mk('c-range', {
+      type: 'bar',
+      data: { labels: cols, datasets: [
+        { label:'Mean', data:means, backgroundColor:PALETTE[0]+'55', borderColor:PALETTE[0], borderWidth:1, borderRadius:3 },
+        { label:'Max', data:maxes, backgroundColor:PALETTE[2]+'55', borderColor:PALETTE[2], borderWidth:1, borderRadius:3 }
+      ]},
+      options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{labels:{color:'#6b7a99',font:{size:11}}} }, scales:{ x:{grid:dkGrid,ticks:dkTick}, y:{grid:dkGrid,ticks:dkTick} } }
+    });
+  }
+}
+
+// ──────────────────────────────────────────────
+// CHARTS TAB
+// ──────────────────────────────────────────────
+function buildCustomChart() {
+  const col = document.getElementById('chartCol')?.value;
+  const type = document.getElementById('chartType')?.value;
+  const aggCol = document.getElementById('aggCol')?.value;
+  if (!col) return;
+
+  document.getElementById('customChartTitle').innerHTML = `<div class="chart-title-dot"></div> ${col} ${aggCol!=='_none'?'by '+aggCol:''}`;
+
+  let labels, data;
+
+  if (aggCol && aggCol !== '_none') {
+    // Group by category, average numeric
+    const groups = {};
+    G.data.forEach(r => {
+      const k = String(r[aggCol]??'other');
+      if (!groups[k]) groups[k] = [];
+      const v = r[col];
+      if (v != null && !isNaN(v)) groups[k].push(v);
+    });
+    const sorted = Object.entries(groups).sort((a,b)=>{
+      const av=a[1].reduce((x,y)=>x+y,0)/a[1].length;
+      const bv=b[1].reduce((x,y)=>x+y,0)/b[1].length;
+      return bv-av;
+    }).slice(0,15);
+    labels = sorted.map(([k])=>k);
+    data = sorted.map(([,vs])=>+(vs.reduce((a,b)=>a+b,0)/vs.length).toFixed(2));
+  } else {
+    // Distribution
+    const vals = G.data.map(r=>r[col]).filter(v=>v!=null&&!isNaN(v)).sort((a,b)=>a-b);
+    const min=vals[0],max=vals[vals.length-1];
+    const bins=12,step=(max-min)/bins||1;
+    const hist=Array(bins).fill(0);
+    vals.forEach(v=>{const i=Math.min(bins-1,Math.floor((v-min)/step));hist[i]++;});
+    labels = Array.from({length:bins},(_,i)=>(min+i*step).toFixed(1));
+    data = hist;
+  }
+
+  const isCircle = type==='pie'||type==='doughnut';
+  const cfg = {
+    type,
+    data: {
+      labels,
+      datasets: [{
+        label: col,
+        data,
+        backgroundColor: isCircle ? PALETTE.map(c=>c+'cc') : PALETTE.map(c=>c+'55'),
+        borderColor: isCircle ? PALETTE : PALETTE,
+        borderWidth: 1,
+        borderRadius: type==='bar'?4:0,
+        fill: type==='line',
+        tension: 0.4,
+        pointRadius: type==='line'?3:undefined,
+        pointBackgroundColor: type==='line'?PALETTE[0]:undefined,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: isCircle, labels:{color:'#6b7a99',font:{size:11}} } },
+      scales: isCircle ? {} : {
+        x:{grid:dkGrid,ticks:{...dkTick,maxRotation:35,font:{size:10}}},
+        y:{grid:dkGrid,ticks:dkTick}
+      }
+    }
+  };
+  mk('c-custom', cfg);
+}
+
+function buildGallery() {
+  const container = document.getElementById('galleryGrid');
+  const cols = G.numCols.slice(0,6);
+  container.innerHTML = cols.map((col,i) => `
+    <div class="chart-card">
+      <div class="chart-title"><div class="chart-title-dot" style="background:${PALETTE[i%PALETTE.length]}"></div>${col}</div>
+      <div style="position:relative;height:180px"><canvas id="gallery-${i}" role="img" aria-label="${col} distribution">${col} chart</canvas></div>
+    </div>`).join('');
+
+  setTimeout(() => {
+    cols.forEach((col,i) => {
+      const vals = G.data.map(r=>r[col]).filter(v=>v!=null&&!isNaN(v)).sort((a,b)=>a-b);
+      if (!vals.length) return;
+      const min=vals[0],max=vals[vals.length-1];
+      const bins=8,step=(max-min)/bins||1;
+      const hist=Array(bins).fill(0);
+      vals.forEach(v=>{const idx=Math.min(bins-1,Math.floor((v-min)/step));hist[idx]++;});
+      const color = PALETTE[i%PALETTE.length];
+
+      mk(`gallery-${i}`, {
+        type:'bar',
+        data:{labels:Array.from({length:bins},(_,j)=>(min+j*step).toFixed(0)),datasets:[{data:hist,backgroundColor:color+'44',borderColor:color,borderWidth:1,borderRadius:3}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{...dkTick,font:{size:9}}},y:{grid:dkGrid,ticks:{...dkTick,font:{size:9}}}}}
+      });
+    });
+  }, 50);
+}
+
+// ──────────────────────────────────────────────
+// STATISTICS
+// ──────────────────────────────────────────────
+function buildStats() {
+  // Numeric stats
+  document.getElementById('numericStats').innerHTML = G.numCols.map(col => {
+    const vals = G.data.map(r=>r[col]).filter(v=>v!=null&&!isNaN(v));
+    if (!vals.length) return '';
+    const sorted = [...vals].sort((a,b)=>a-b);
+    const n=vals.length, sum=vals.reduce((a,b)=>a+b,0);
+    const mean=sum/n;
+    const median=sorted[Math.floor(n/2)];
+    const min=sorted[0], max=sorted[n-1];
+    const std=Math.sqrt(vals.reduce((a,b)=>a+(b-mean)**2,0)/n);
+    const nulls=G.data.length-n;
+    const q1=sorted[Math.floor(n*.25)], q3=sorted[Math.floor(n*.75)];
+
+    return `<div class="stat-col-card">
+      <div class="stat-col-name">${col} <span class="stat-type-badge num">numeric</span></div>
+      <div class="stat-row"><span class="stat-key">count</span><span class="stat-val">${n.toLocaleString()}</span></div>
+      <div class="stat-row"><span class="stat-key">mean</span><span class="stat-val">${mean.toFixed(3)}</span></div>
+      <div class="stat-row"><span class="stat-key">median</span><span class="stat-val">${median}</span></div>
+      <div class="stat-row"><span class="stat-key">std dev</span><span class="stat-val">${std.toFixed(3)}</span></div>
+      <div class="stat-row"><span class="stat-key">min</span><span class="stat-val">${min}</span></div>
+      <div class="stat-row"><span class="stat-key">25th pct</span><span class="stat-val">${q1}</span></div>
+      <div class="stat-row"><span class="stat-key">75th pct</span><span class="stat-val">${q3}</span></div>
+      <div class="stat-row"><span class="stat-key">max</span><span class="stat-val">${max}</span></div>
+      <div class="stat-row"><span class="stat-key">nulls</span><span class="stat-val" style="color:${nulls>0?'#f5a623':'#43e97b'}">${nulls}</span></div>
+    </div>`;
+  }).join('');
+
+  // Categorical stats
+  document.getElementById('catStats').innerHTML = G.catCols.map(col => {
+    const vals = G.data.map(r=>String(r[col]??'')).filter(v=>v&&v!=='null'&&v!=='undefined');
+    const counts = {};
+    vals.forEach(v => counts[v] = (counts[v]||0)+1);
+    const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+    const unique = sorted.length;
+    const top5 = sorted.slice(0,5);
+
+    return `<div class="stat-col-card">
+      <div class="stat-col-name">${col} <span class="stat-type-badge cat">categorical</span></div>
+      <div class="stat-row"><span class="stat-key">count</span><span class="stat-val">${vals.length.toLocaleString()}</span></div>
+      <div class="stat-row"><span class="stat-key">unique</span><span class="stat-val">${unique}</span></div>
+      <div class="stat-row"><span class="stat-key">mode</span><span class="stat-val" style="max-width:110px;overflow:hidden;text-overflow:ellipsis">${sorted[0]?.[0]}</span></div>
+      ${top5.map(([k,v])=>{
+        const pct=(v/vals.length*100).toFixed(1);
+        return `<div style="margin-top:5px">
+          <div class="stat-row"><span class="stat-key" style="max-width:110px;overflow:hidden;text-overflow:ellipsis">${k}</span><span class="stat-val">${v} <span style="color:#6b7a99">(${pct}%)</span></span></div>
+          <div class="bar-mini"><div class="bar-fill" style="width:${pct}%;background:#a78bfa66"></div></div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).join('');
+
+  if (!G.catCols.length) document.getElementById('catStats').innerHTML = '<div class="empty-state">No categorical columns detected</div>';
+}
+
+// ──────────────────────────────────────────────
+// CORRELATION
+// ──────────────────────────────────────────────
+function buildCorrelation() {
+  const cols = G.numCols.slice(0, 8);
+  if (cols.length < 2) {
+    document.getElementById('correlationHeatmap').innerHTML = '<div class="empty-state">Need at least 2 numeric columns for correlation</div>';
+    return;
+  }
+
+  function corr(a, b) {
+    const n=a.length;
+    const ma=a.reduce((s,v)=>s+v,0)/n, mb=b.reduce((s,v)=>s+v,0)/n;
+    const num=a.reduce((s,v,i)=>s+(v-ma)*(b[i]-mb),0);
+    const da=Math.sqrt(a.reduce((s,v)=>s+(v-ma)**2,0));
+    const db=Math.sqrt(b.reduce((s,v)=>s+(v-mb)**2,0));
+    return da&&db ? num/(da*db) : 0;
+  }
+
+  const matrix = [];
+  const pairsList = [];
+
+  for (let i=0;i<cols.length;i++) {
+    matrix[i] = [];
+    for (let j=0;j<cols.length;j++) {
+      const av=G.data.map(r=>r[cols[i]]).filter(v=>v!=null&&!isNaN(v));
+      const bv=G.data.map(r=>r[cols[j]]).filter(v=>v!=null&&!isNaN(v));
+      const minLen=Math.min(av.length,bv.length);
+      const r=corr(av.slice(0,minLen),bv.slice(0,minLen));
+      matrix[i][j]=r;
+      if(i<j) pairsList.push({a:cols[i],b:cols[j],r});
+    }
+  }
+
+  // Color fn
+  function hmColor(v) {
+    if (v > 0.7) return `rgba(67,233,123,${Math.abs(v)*0.8})`;
+    if (v > 0.3) return `rgba(78,168,245,${Math.abs(v)*0.8})`;
+    if (v > -0.3) return `rgba(107,122,153,0.2)`;
+    if (v > -0.7) return `rgba(240,101,149,${Math.abs(v)*0.6})`;
+    return `rgba(245,82,73,${Math.abs(v)*0.8})`;
+  }
+
+  const size = cols.length;
+  const hm = document.getElementById('correlationHeatmap');
+  hm.style.setProperty('--size', size+1);
+
+  let html = `<div class="heatmap" style="grid-template-columns:repeat(${size+1},54px)">`;
+  html += `<div class="hm-label"></div>`;
+  cols.forEach(c => html += `<div class="hm-label">${c.length>6?c.slice(0,6)+'…':c}</div>`);
+  for (let i=0;i<size;i++) {
+    html += `<div class="hm-label">${cols[i].length>6?cols[i].slice(0,6)+'…':cols[i]}</div>`;
+    for (let j=0;j<size;j++) {
+      const v = matrix[i][j];
+      const tc = Math.abs(v) > 0.4 ? '#e8eef8' : '#6b7a99';
+      html += `<div class="hm-cell" style="background:${hmColor(v)};color:${tc}" title="${cols[i]} × ${cols[j]}: ${v.toFixed(3)}">${v.toFixed(2)}</div>`;
+    }
+  }
+  html += `</div>`;
+  hm.innerHTML = html;
+
+  // Corr bar with first col
+  const corrWithFirst = cols.slice(1).map((c,i) => ({c, r: matrix[0][i+1]}));
+  mk('c-corrbar', {
+    type:'bar',
+    data:{
+      labels:corrWithFirst.map(({c})=>c),
+      datasets:[{
+        label:`corr with ${cols[0]}`,
+        data:corrWithFirst.map(({r})=>+r.toFixed(3)),
+        backgroundColor:corrWithFirst.map(({r})=>r>=0?'#43e97b55':'#f0659555'),
+        borderColor:corrWithFirst.map(({r})=>r>=0?'#43e97b':'#f06595'),
+        borderWidth:1,borderRadius:4
+      }]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{
+      x:{grid:dkGrid,ticks:dkTick},
+      y:{grid:dkGrid,ticks:dkTick,min:-1,max:1}
+    }}
+  });
+
+  // Top pairs
+  const topPairs = pairsList.sort((a,b)=>Math.abs(b.r)-Math.abs(a.r)).slice(0,8);
+  document.getElementById('corrPairs').innerHTML = `<div class="sf">` +
+    topPairs.map(({a,b,r}) => {
+      const col = r > 0.5 ? '#43e97b' : r < -0.5 ? '#f06595' : '#6b7a99';
+      return `<div class="stat-row">
+        <span class="stat-key">${a} × ${b}</span>
+        <span style="font-weight:600;font-family:var(--font-mono);font-size:11px;color:${col}">${r.toFixed(3)}</span>
+      </div>
+      <div class="bar-mini"><div class="bar-fill" style="width:${Math.abs(r)*100}%;background:${col}66"></div></div>`;
+    }).join('') + `</div>`;
+}
+
+// ──────────────────────────────────────────────
+// SCATTER
+// ──────────────────────────────────────────────
+function buildScatter() {
+  const x = document.getElementById('scatterX')?.value;
+  const y = document.getElementById('scatterY')?.value;
+  const colorBy = document.getElementById('scatterColor')?.value;
+  if (!x || !y) return;
+
+  let datasets;
+
+  if (colorBy && colorBy !== '_none') {
+    const groups = {};
+    G.data.forEach(r => {
+      const k = String(r[colorBy]??'other');
+      if (!groups[k]) groups[k] = [];
+      const xv = r[x], yv = r[y];
+      if (xv!=null&&!isNaN(xv)&&yv!=null&&!isNaN(yv)) groups[k].push({x:xv,y:yv});
+    });
+    const gkeys = Object.keys(groups).slice(0,12);
+    datasets = gkeys.map((k,i) => ({
+      label: k,
+      data: groups[k],
+      backgroundColor: PALETTE[i%PALETTE.length]+'99',
+      borderColor: PALETTE[i%PALETTE.length],
+      borderWidth: 1,
+      pointRadius: 5
+    }));
+  } else {
+    const pts = G.data.map(r => {
+      const xv=r[x],yv=r[y];
+      return (xv!=null&&!isNaN(xv)&&yv!=null&&!isNaN(yv)) ? {x:xv,y:yv} : null;
+    }).filter(Boolean);
+    datasets = [{ label:'data', data:pts, backgroundColor:PALETTE[0]+'77', borderColor:PALETTE[0], borderWidth:1, pointRadius:5 }];
+  }
+
+  mk('c-scatter', {
+    type:'scatter',
+    data:{ datasets },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{ legend:{ display:colorBy!=='_none', labels:{color:'#6b7a99',font:{size:11}} } },
+      scales:{
+        x:{grid:dkGrid,ticks:dkTick,title:{display:true,text:x,color:'#6b7a99',font:{size:11}}},
+        y:{grid:dkGrid,ticks:dkTick,title:{display:true,text:y,color:'#6b7a99',font:{size:11}}}
+      }
+    }
+  });
+}
+
+// ──────────────────────────────────────────────
+// TABLE
+// ──────────────────────────────────────────────
+let sortDir = {}, currentSearch = '';
+
+function filterTable() {
+  currentSearch = document.getElementById('tableSearch').value.toLowerCase();
+  G.filteredData = G.data.filter(row =>
+    G.cols.some(c => String(row[c]??'').toLowerCase().includes(currentSearch))
+  );
+  G.currentPage = 1;
+  renderTable();
+}
+
+function sortTable(col) {
+  if (G.sortCol === col) {
+    G.sortDir = G.sortDir === 1 ? -1 : 1;
+  } else {
+    G.sortCol = col;
+    G.sortDir = 1;
+  }
+
+  G.filteredData.sort((a, b) => {
+    const av = a[col], bv = b[col];
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (typeof av === 'number') return (av - bv) * G.sortDir;
+    return String(av).localeCompare(String(bv)) * G.sortDir;
+  });
+
+  document.querySelectorAll('#tableHead th').forEach(th => {
+    th.className = th.dataset.col === col ? (G.sortDir===1?'sort-asc':'sort-desc') : '';
+  });
+
+  renderTable();
+}
+
+function renderTable() {
+  const rpp = parseInt(document.getElementById('rowsPerPage')?.value) || 20;
+  const total = G.filteredData.length;
+  const pages = Math.ceil(total / rpp);
+  const start = (G.currentPage - 1) * rpp;
+  const pageData = G.filteredData.slice(start, start + rpp);
+
+  // Header
+  document.getElementById('tableHead').innerHTML = `<tr>${G.cols.map(c =>
+    `<th data-col="${c}" onclick="sortTable('${c}')" title="Sort by ${c}">${c}</th>`).join('')}</tr>`;
+
+  // Restore sort indicators
+  if (G.sortCol) {
+    document.querySelectorAll('#tableHead th').forEach(th => {
+      if (th.dataset.col === G.sortCol) th.className = G.sortDir===1?'sort-asc':'sort-desc';
+    });
+  }
+
+  // Body
+  document.getElementById('tableBody').innerHTML = pageData.map(row =>
+    `<tr>${G.cols.map(c => {
+      const v = row[c];
+      const isNum = typeof v === 'number';
+      return `<td style="color:${isNum?'#4ea8f5':'var(--text)'};text-align:${isNum?'right':'left'}" title="${v??''}">${v??''}</td>`;
+    }).join('')}</tr>`
+  ).join('');
+
+  // Info
+  document.getElementById('tableInfo').textContent = `${start+1}–${Math.min(start+rpp,total)} of ${total.toLocaleString()} rows`;
+
+  // Pagination
+  const pag = document.getElementById('pagination');
+  let btns = `<button class="page-btn" onclick="goPage(${G.currentPage-1})" ${G.currentPage<=1?'disabled':''}>←</button>`;
+  const range = 3;
+  for (let p = Math.max(1,G.currentPage-range); p <= Math.min(pages,G.currentPage+range); p++) {
+    btns += `<button class="page-btn ${p===G.currentPage?'active':''}" onclick="goPage(${p})">${p}</button>`;
+  }
+  btns += `<button class="page-btn" onclick="goPage(${G.currentPage+1})" ${G.currentPage>=pages?'disabled':''}>→</button>`;
+  pag.innerHTML = btns;
+}
+
+function goPage(p) {
+  const rpp = parseInt(document.getElementById('rowsPerPage')?.value) || 20;
+  const pages = Math.ceil(G.filteredData.length / rpp);
+  if (p < 1 || p > pages) return;
+  G.currentPage = p;
+  renderTable();
+}
+
+// ──────────────────────────────────────────────
+// TABS
+// ──────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  if (btn) btn.classList.add('active');
+}
+</script>
+</body>
+</html>
